@@ -1,0 +1,81 @@
+﻿Sr. no,Category ,Questions
+1,fresh,What Are the Different Types of Machine Learning?
+2,fresh,"What is Overfitting, and How Can You Avoid It? "
+3,fresh,"What is ‘training Set’ and ‘test Set’ in a Machine Learning Model? How Much Data Will You Allocate for Your Training, Validation, and Test Sets?"
+4,fresh,How Do You Handle Missing or Corrupted Data in a Dataset?
+5,fresh,How Can You Choose a Classifier Based on a Training Set Data Size?
+6,fresh,Explain the Confusion Matrix with Respect to Machine Learning Algorithms.
+7,fresh,What Is a False Positive and False Negative and How Are They Significant?
+8,fresh,What Are the Three Stages of Building a Model in Machine Learning?
+9,fresh,What is Deep Learning?
+10,fresh,What Are the Differences Between Machine Learning and Deep Learning?
+11,fresh,What Are the Applications of Supervised Machine Learning in Modern Businesses?
+12,fresh,What is Semi-supervised Machine Learning?
+13,fresh,What Are Unsupervised Machine Learning Techniques? 
+14,fresh,What is the Difference Between Supervised and Unsupervised Machine Learning?
+15,fresh,What is the Difference Between Inductive Machine Learning and Deductive Machine Learning? 
+16,fresh,Compare K-means and KNN Algorithms.
+17,fresh,When Will You Use Classification over Regression?
+18,fresh,What is randonm forest and how can you differentiate with other classification algorithm
+19,fresh,What is Clustering?
+20,fresh,What are Recommender Systems?
+21,fresh,What are Parametric and Non-Parametric Models?
+22,fresh,What is Reinforcement Learning?
+23,fresh,What is Time series?
+24,intermediate,How Do You Design an Email Spam Filter?
+25,intermediate,"Considering a Long List of Machine Learning Algorithms, given a Data Set, How Do You Decide Which One to Use?"
+26,intermediate,What is Bias and Variance in a Machine Learning Model?
+27,intermediate,What is the Trade-off Between Bias and Variance?
+28,intermediate,What is Collaborative Filtering?
+29,intermediate,What is Content-Based Filtering?
+30,intermediate,How can you select K for K-means Clustering?
+31,intermediate,How do check the Normality of a dataset?
+32,intermediate,Can logistic regression use for more than 2 classes?
+33,intermediate,Explain Correlation and Covariance?
+34,intermediate,What is P-value?
+35,intermediate,Difference Between Sigmoid and Softmax functions?
+36,intermediate,What is PCA and how do to use it?
+37,intermediate,What are Loss Function and Cost Functions? Explain the key Difference Between them?
+38,intermediate,How do you make sure which Machine Learning Algorithm to use?
+39,intermediate,How to Handle Outlier Values?
+40,intermediate,How do check the Normality of a dataset?
+41,intermediate,What is P-value?
+42,intermediate,Difference Between Sigmoid and Softmax functions?
+43,intermediate,How to Tackle Overfitting and Underfitting?
+44,intermediate,What is Entropy in Machine Learning?
+45,intermediate,What is Epoch in Machine Learning?
+46,intermediate,What is the Variance Inflation Factor?
+47,intermediate,What is a Confusion Matrix?
+48,intermediate,Explain the difference between KNN and K-means Clustering
+49,intermediate,What is the difference between stochastic gradient descent (SGD) and gradient descent (GD)?
+50,intermediate,What is the difference between regularization and normalisation? 
+51,senior,What are Type I and Type II Errors?
+52,senior,When should Classification be used over Regression?
+53,senior,Why is rotation required in PCA? What will happen if the components are not rotated?
+54,senior,What is ROC Curve and what does it represent?
+55,senior,Why are Validation and Test Datasets Needed?
+56,senior,What is Dimensionality Reduction?
+57,senior,"Both being Tree-based Algorithms, how is Random Forest different from Gradient Boosting Machine (GBM)?"
+58,senior,What is meant by Parametric and Non-parametric Models?
+59,senior,"In Machine Learning, for how many classes can Logistic Regression be used?"
+60,senior,What are the Various Tests for Checking the Normality of a Dataset?
+61,senior,What are the Two Main Types of Filtering in Machine Learning? Explain.
+62,senior,Outlier Values can be Discovered from which Tools?
+63,senior,What is Rescaling of Data and how is it done?
+64,senior,What is Binarizing of Data? How to Binarize?
+65,senior,How to Standardize Data?
+66,senior,"We know that one-hot encoding increases the dimensionality of a dataset, but label encoding doesn’t. How?"
+67,senior,"Explain False Negative, False Positive, True Negative, and True Positive with a simple example."
+68,senior,What is F1-score and How Is It Used?
+69,senior,When does regularization come into play in Machine Learning?
+70,senior,How can we relate standard deviation and variance?
+71,senior,"If your dataset is suffering from high variance, how would you handle it?"
+72,senior,Explain the handling of missing or corrupted values in the given dataset.
+73,senior,What is a Box-Cox transformation?
+74,senior,What is the exploding gradient problem while using back propagation technique?
+75,senior,What’s a Fourier transform?
+76,senior,What do you mean by Associative Rule Mining (ARM)?
+77,senior,What is Marginalisation? Explain the process.
+78,senior,What is the Principle Component Analysis?
+79,senior,Why is rotation of components so important in Principle Component Analysis (PCA)?
+80,senior,Which machine learning algorithm is known as the lazy learner and why is it called so?
