@@ -21,6 +21,8 @@ class User(db.Model):
     email = db.Column(db.String(120), unique=True, nullable=False)
     password = db.Column(db.String(200), nullable=False)
 
+    sessions = db.relationship('InterviewSession', backref='user', lazy=True)
+
     def __repr__(self):
         return f'<User {self.username}>'
 
@@ -34,6 +36,8 @@ class InterviewSession(db.Model):
     __tablename__ = 'interview_sessions'
 
     id = db.Column(db.Integer, primary_key=True)
+
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
 
     # Informasi Interview
     role_focus = db.Column(db.String(100), nullable=False)   # Backend Engineer

@@ -1,10 +1,18 @@
+from multiprocessing import util
 import os
+import io
+import asyncio
+import edge_tts
+from pydub import AudioSegment
 from dotenv import load_dotenv
 import pandas as pd
 import chromadb
 import json
 from chromadb.utils import embedding_functions
 from groq import Groq
+from sqlalchemy import text
+from sympy import content
+from sentence_transformers import util, SentenceTransformer
 from gtts import gTTS
 from development.db import db
 from development.db import InterviewSession, InterviewQuestion, InterviewAnswer
@@ -12,11 +20,16 @@ from development.db import InterviewSession, InterviewQuestion, InterviewAnswer
 # Load environment variables
 load_dotenv()
 
+ENV_MODE = os.getenv("ENV_MODE", "development")
+
 # Setup Global
 chroma_client = None
 collection = None
 
-# Konfigurasi Path Dinamis (Bukan Hardcode D:\...)
+# embedder = SentenceTransformer("all-MiniLM-L6-v2")
+embedder = SentenceTransformer("paraphrase-multilingual-MiniLM-L12-v2")
+
+# Konfigurasi Path 
 BASE_DIR = os.path.abspath(os.path.dirname(__file__)) 
 PROJECT_ROOT = os.path.dirname(BASE_DIR) 
 AUDIO_FOLDER = os.path.join(PROJECT_ROOT, 'static', 'audio')
@@ -27,42 +40,63 @@ os.makedirs(AUDIO_FOLDER, exist_ok=True)
 def init_knowledge_base():
     global chroma_client, collection
 
-    if collection:
-        return collection
+    if ENV_MODE == "production":
+        count = db.session.execute(text("SELECT count(*) FROM knowledge_base")).scalar()
+        if count > 0:
+            return True # Sudah terisi
 
-    chroma_path = os.path.join(PROJECT_ROOT, 'chroma_storage')
-    chroma_client = chromadb.PersistentClient(path=chroma_path)
+        if not os.path.exists(DATA_PATH): return False
 
-    embed_fn = embedding_functions.SentenceTransformerEmbeddingFunction(
-        model_name="all-MiniLM-L6-v2"
-    )
-
-    collection = chroma_client.get_or_create_collection(
-        name="adaptive_interview_rag",
-        embedding_function=embed_fn
-    )
-
-    if collection.count() == 0:
-        if not os.path.exists(DATA_PATH):
-            return None
-
+        print("[PROD] Memasukkan CSV ke Supabase Vector...")
         df = pd.read_csv(DATA_PATH).fillna("General Concept")
 
-        documents = df["Embedding_Text"].tolist()
-        ids = [f"q_{i}" for i in range(len(df))]
+        for index, row in df.iterrows():
+            doc_text = row["Embedding_Text"]
+            emb = embedder.encode(doc_text).tolist() 
+            meta = {
+                "role": str(row["Role"]), "stage": str(row["Stage"]),
+                "difficulty_level": int(row["Adaptive_Level"]), "answer": str(row["Answer"])
+            }
+            rag_id = f"q_{index}"
 
-        metadatas = []
-        for _, row in df.iterrows():
-            metadatas.append({
-                "role": str(row["Role"]),
-                "stage": str(row["Stage"]),
-                "difficulty_level": int(row["Adaptive_Level"]),
-                "answer": str(row["Answer"])
+            insert_query = text("""
+                INSERT INTO knowledge_base (id, content, metadata, embedding)
+                VALUES (:id, :content, :metadata, :embedding)
+            """)
+            db.session.execute(insert_query, {
+                "id": rag_id, "content": doc_text,
+                "metadata": json.dumps(meta), "embedding": str(emb)
             })
+            
+        db.session.commit()
+        print("[PROD] Selesai migrasi CSV ke Supabase!")
+        return True
 
-        collection.add(documents=documents, metadatas=metadatas, ids=ids)
+    else:
+        if collection: return collection
 
-    return collection
+        chroma_path = os.path.join(PROJECT_ROOT, 'chroma_storage')
+        chroma_client = chromadb.PersistentClient(path=chroma_path)
+        embed_fn = embedding_functions.SentenceTransformerEmbeddingFunction(model_name="all-MiniLM-L6-v2")
+        collection = chroma_client.get_or_create_collection(name="adaptive_interview_rag", embedding_function=embed_fn)
+
+        if collection.count() == 0:
+            if not os.path.exists(DATA_PATH): return None
+
+            print("[DEV] Memasukkan CSV ke ChromaDB Lokal...")
+            df = pd.read_csv(DATA_PATH).fillna("General Concept")
+            documents = df["Embedding_Text"].tolist()
+            ids = [f"q_{i}" for i in range(len(df))]
+            metadatas = []
+            for _, row in df.iterrows():
+                metadatas.append({
+                    "role": str(row["Role"]), "stage": str(row["Stage"]),
+                    "difficulty_level": int(row["Adaptive_Level"]), "answer": str(row["Answer"])
+                })
+            collection.add(documents=documents, metadatas=metadatas, ids=ids)
+            print("[DEV] Selesai migrasi CSV ke ChromaDB!")
+            
+        return collection
 
 def get_groq_client():
     # Konsisten pakai TTS_API_KEY
@@ -72,17 +106,18 @@ def get_groq_client():
     return Groq(api_key=api_key)
 
 def generate_audio_for_question(text, session_id, q_index):
-    """Menghasilkan file audio mp3 dari teks pertanyaan"""
+    """Menghasilkan file audio mp3 dari teks pertanyaan menggunakan Edge TTS"""
     filename = f"interview_{session_id}_q{q_index}_{os.urandom(4).hex()}.mp3"
     filepath = os.path.join(AUDIO_FOLDER, filename)
     try:
-        tts = gTTS(text=text, lang='id') 
-        tts.save(filepath)
+        # Menggunakan suara Gadis (Wanita Indonesia)
+        communicate = edge_tts.Communicate(text, "id-ID-GadisNeural")
+        asyncio.run(communicate.save(filepath))
         return f"/static/audio/{filename}"
     except Exception as e:
-        print(f"TTS Error: {e}")
+        print(f"Edge TTS Error: {e}")
         return None
-    
+
 def transcribe_audio(audio_file):
     """Convert audio to text using Groq Whisper."""
     client = get_groq_client()
@@ -95,7 +130,7 @@ def transcribe_audio(audio_file):
             file=file_tuple,
             model="whisper-large-v3",
             response_format="json",  
-            language="id", # Set ke Indonesia
+            language="id", 
             temperature=0.0          
         )
         return transcription.text
@@ -116,6 +151,12 @@ def extract_experience_topics(user_answer):
         return []
 
 def evaluate_answer_ai(question, ideal_answer, user_answer):
+    ideal_emb = embedder.encode(ideal_answer)
+    user_emb = embedder.encode(user_answer)
+
+    cosine_raw = util.cos_sim(ideal_emb, user_emb).item()
+    cosine_score = max(0, round(cosine_raw * 100))
+
     client = get_groq_client()
     prompt = f"""Bertindak sebagai penilai interview.
     Pertanyaan: {question}
@@ -125,28 +166,51 @@ def evaluate_answer_ai(question, ideal_answer, user_answer):
     try:
         res = client.chat.completions.create(model="llama-3.3-70b-versatile", messages=[{"role": "user", "content": prompt}], temperature=0.2)
         content = res.choices[0].message.content.replace("```json","").replace("```","").strip()
-        return json.loads(content)
-    except:
-        return {"score": 50, "feedback": "Evaluasi error, diasumsikan standar.", "status": "Average"}
+        llm_result = json.loads(content)
+        
+        llm_score = int(llm_result.get("score", 50)) 
+        feedback = llm_result.get("feedback", "Jawaban cukup baik.")
+        
+    except Exception as e: 
+        print(f"[DEBUG] Error parsing JSON dari LLM: {e}")
+        llm_score = 50
+        feedback = "Evaluasi LLM error, diasumsikan standar."
+
+    final_score = round((llm_score * 0.7) + (cosine_score * 0.3))
+
+    if final_score > 75:
+        status = "Good"
+    elif final_score > 50:
+        status = "Average"
+    else:
+        status = "Bad"
+
+    print(f"[DEBUG EVALUASI] LLM Score: {llm_score} | Cosine Score: {cosine_score} | Final: {final_score}")
+
+    return {
+        "score": final_score,
+        "feedback": feedback,
+        "status": status
+    }
 
 def generate_interview_question(context_text, ideal_answer, role, difficulty_label, background=None, stage="Technical", previous_questions=None):
     client = get_groq_client()
     
-    # 1. Bumbuhi pertanyaan dengan tech stack kandidat jika ada
+    # Menyesuaikan konteks pertanyaan dengan tech stack kandidat jika ada
     bg_str = ", ".join(background) if background else ""
     bg_instruction = ""
     if bg_str:
         bg_instruction = f"""
-        - BUMBUHI PERTANYAAN: Kandidat memiliki pengalaman dengan teknologi ini: {bg_str}.
+        - SESUAIKAN KONTEKS: Kandidat memiliki pengalaman dengan teknologi ini: {bg_str}.
         - JIKA memungkinkan, jadikan salah satu teknologi tersebut sebagai konteks atau contoh kasus di dalam pertanyaan Anda.
         """
 
-    # 2. Cegah Redundansi
+    # Mencegah Redundansi
     prev_q_prompt = ""
     if previous_questions:
         prev_q_prompt = f"\nPENTING: JANGAN ulangi atau gunakan topik yang mirip dengan daftar pertanyaan sebelumnya berikut ini:\n- " + "\n- ".join(previous_questions)
 
-    # 3. Sesuaikan instruksi berdasarkan stage wawancara
+    # Menyesuaikan instruksi berdasarkan stage wawancara
     if stage == "Study Case":
         tugas = "Berikan sebuah studi kasus (Study Case) atau skenario problem-solving berskala arsitektur/sistem."
     elif stage == "Soft Skill":
@@ -154,7 +218,7 @@ def generate_interview_question(context_text, ideal_answer, role, difficulty_lab
     else:
         tugas = "Buat 1 pertanyaan wawancara teknis spesifik."
 
-    # 4. Prompt Utama
+    # Prompt Utama
     prompt = f"""Anda adalah Senior Tech Interviewer berbahasa Indonesia untuk posisi {role} (Level: {difficulty_label}).
     
     Topik Inti (Bahan Pertanyaan): {context_text}
@@ -181,30 +245,53 @@ def generate_interview_question(context_text, ideal_answer, role, difficulty_lab
         return f"Tolong jelaskan tentang: {context_text}"
 
 def retrieve_adaptive_question(role, stage, difficulty, used_ids):
-    global collection
-    if not collection:
-        init_knowledge_base()
+    init_knowledge_base()
 
-    where_filter = {"$and": [{"role": role}, {"stage": stage}]}
+    if ENV_MODE == "production":
+        query_text = f"{role} {stage} level {difficulty}"
+        query_embedding = embedder.encode(query_text).tolist()
 
-    if stage == "Technical":
-        where_filter["$and"].append({"difficulty_level": difficulty})
+        if stage == "Technical":
+            sql = text("""
+                SELECT id, content, metadata FROM knowledge_base
+                WHERE metadata->>'role' = :role AND metadata->>'stage' = :stage AND (metadata->>'difficulty_level')::int = :diff
+                ORDER BY embedding <=> :emb::vector LIMIT 20
+            """)
+            params = {"role": role, "stage": stage, "diff": difficulty, "emb": str(query_embedding)}
+        else:
+            sql = text("""
+                SELECT id, content, metadata FROM knowledge_base
+                WHERE metadata->>'role' = :role AND metadata->>'stage' = :stage
+                ORDER BY embedding <=> :emb::vector LIMIT 20
+            """)
+            params = {"role": role, "stage": stage, "emb": str(query_embedding)}
 
-    results = collection.query(
-        query_texts=[f"{role} {stage} level {difficulty}"],
-        n_results=20,
-        where=where_filter
-    )
-
-    if not results["documents"] or not results["documents"][0]:
+        results = db.session.execute(sql, params).fetchall()
+        for row in results:
+            if row.id not in used_ids:
+                return row.content, row.metadata, row.id
         return None, None, None
 
-    for i, doc in enumerate(results["documents"][0]):
-        rag_id = results["ids"][0][i]
-        if rag_id not in used_ids:
-            return doc, results["metadatas"][0][i], rag_id
+    else:
+        global collection
+        where_filter = {"$and": [{"role": role}, {"stage": stage}]}
+        if stage == "Technical":
+            where_filter["$and"].append({"difficulty_level": difficulty})
 
-    return None, None, None
+        results = collection.query(
+            query_texts=[f"{role} {stage} level {difficulty}"],
+            n_results=20,
+            where=where_filter
+        )
+
+        if not results["documents"] or not results["documents"][0]:
+            return None, None, None
+
+        for i, doc in enumerate(results["documents"][0]):
+            rag_id = results["ids"][0][i]
+            if rag_id not in used_ids:
+                return doc, results["metadatas"][0][i], rag_id
+        return None, None, None
 
 def generate_final_report_ai(history, role):
     client = get_groq_client()
@@ -239,13 +326,14 @@ def build_session_history(session_id):
 
     return history
 
-def start_interview_session(role="Backend Engineer", level="Junior"):
+def start_interview_session(user_id, role="Backend Engineer", level="Junior"):
     """
     Membuat session baru dan menyimpan opening question ke DB
     """
 
     # 1. Buat Session
     new_session = InterviewSession(
+        user_id=user_id,
         role_focus=role,
         level=level,
         current_stage="Opening",
@@ -368,13 +456,6 @@ def process_candidate_answer(session_id, user_answer):
 
         diff_label = ["Easy", "Medium", "Hard"][session.current_difficulty - 1]
 
-        # next_question = generate_interview_question(
-        #     context,
-        #     ideal,
-        #     f"{session.level} {session.role_focus}",
-        #     diff_label
-        # )
-
         past_questions_records = InterviewQuestion.query.filter_by(session_id=session_id).order_by(InterviewQuestion.order_num.asc()).all()
         recent_questions = [q.question_text for q in past_questions_records[-4:]] if past_questions_records else []
 
@@ -418,3 +499,32 @@ def process_candidate_answer(session_id, user_answer):
         db.session.rollback()
         print("PROCESS ERROR:", e)
         return {"error": "Terjadi kesalahan sistem."}
+    
+def force_end_interview(session_id):
+    try:
+        session = InterviewSession.query.get(session_id)
+        if not session:
+            return {"error": "Session tidak valid."}
+        
+        if session.is_completed:
+            return {"message": "Wawancara sudah selesai."}
+
+        # Kumpulkan semua history yang sudah ada
+        history = build_session_history(session_id)
+        
+        # Minta AI buat final report berdasarkan obrolan yang terpotong ini
+        if history:
+            final_report = generate_final_report_ai(history, session.role_focus)
+        else:
+            final_report = "Kandidat mengakhiri wawancara sebelum memberikan jawaban apa pun."
+
+        session.final_report = final_report
+        session.is_completed = True
+        db.session.commit()
+
+        return {"success": True, "message": "Wawancara diakhiri secara paksa dan laporan disimpan."}
+    
+    except Exception as e:
+        db.session.rollback()
+        print("FORCE END ERROR:", e)
+        return {"error": "Gagal mengakhiri wawancara secara paksa."}

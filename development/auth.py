@@ -1,5 +1,6 @@
 # auth.py
 import os
+from dotenv import load_dotenv
 from flask import Flask, request, jsonify
 from flask_jwt_extended import (
     JWTManager, jwt_required, get_jwt_identity, 
@@ -12,14 +13,24 @@ from datetime import datetime, timedelta, timezone
 # Import dari file db.py yang berada di satu folder
 from development.db import db, User, TokenBlocklist
 
+load_dotenv()
+
 base_dir = os.path.abspath(os.path.dirname(__file__)) # Folder development/
 root_dir = os.path.dirname(base_dir) # Folder interview-backend/
 static_folder_path = os.path.join(root_dir, 'static')
 
 app = Flask(__name__, static_folder=static_folder_path, static_url_path='/static')
 
+ENV_MODE = os.getenv("ENV_MODE", "development")
+
 # --- KONFIGURASI DATABASE ---
-app.config['SQLALCHEMY_DATABASE_URI'] = 'postgresql://postgres:admin@localhost:5432/interview_db'
+if ENV_MODE == "development":
+    # Jika mode lokal, konek ke DBeaver
+    app.config['SQLALCHEMY_DATABASE_URI'] = 'postgresql://postgres:admin@localhost:5432/interview_db'
+else:
+    # Jika mode production, konek ke Supabase
+    app.config["SQLALCHEMY_DATABASE_URI"] = os.getenv("SUPABASE_DATABASE_URL")
+
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 # --- KONFIGURASI JWT ---
@@ -86,14 +97,15 @@ def login():
     if not user or not check_password_hash(user.password, password):
         return jsonify({"msg": "Username atau Password salah"}), 401
 
-    access_token = create_access_token(identity=user.username)
-    refresh_token = create_refresh_token(identity=user.username)
+    access_token = create_access_token(identity=str(user.id))
+    refresh_token = create_refresh_token(identity=str(user.id))
     
     return jsonify({
         "msg": "Login berhasil",
         "access_token": access_token, 
         "refresh_token": refresh_token,
         "user_details": {
+            "id": user.id,
             "username": user.username,
             "email": user.email
         }
@@ -118,5 +130,9 @@ def logout():
 @app.route('/protected', methods=['GET'])
 @jwt_required()
 def protected():
-    current_user = get_jwt_identity()
-    return jsonify(logged_in_as=current_user), 200
+    current_user_id = get_jwt_identity()
+    user = User.query.get(current_user_id)
+    return jsonify(
+        logged_in_as_id=current_user_id,
+        username=user.username
+    ), 200

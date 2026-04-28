@@ -1,24 +1,28 @@
 # development/interview_routes.py
 from flask import Blueprint, request, jsonify
+from flask_jwt_extended import jwt_required, get_jwt_identity
 from development.db import InterviewSession, InterviewQuestion, InterviewAnswer
 from development.interview_service import (
     start_interview_session,
     process_candidate_answer,
     transcribe_audio,
-    build_session_history
+    build_session_history,
+    force_end_interview
 )
 
 interview_bp = Blueprint('interview', __name__)
 
 @interview_bp.route("/start", methods=["POST"])
+@jwt_required()
 def start_interview():
+    current_user_id = get_jwt_identity()
 
     data = request.get_json() or {}
 
     role = data.get("role", "Backend Engineer")
     level = data.get("level", "Junior")
 
-    result = start_interview_session(role, level)
+    result = start_interview_session(current_user_id, role, level)
 
     return jsonify({
         "success": True,
@@ -96,9 +100,11 @@ def submit_audio_answer():
     }), 200
 
 @interview_bp.route("/<int:session_id>", methods=["GET"])
+@jwt_required()
 def get_interview_detail(session_id):
+    current_user_id = get_jwt_identity()
 
-    session = InterviewSession.query.get(session_id)
+    session = InterviewSession.query.filter_by(id=session_id, user_id=current_user_id).first()
 
     if not session:
         return jsonify({
@@ -125,9 +131,13 @@ def get_interview_detail(session_id):
     }), 200
 
 @interview_bp.route("/history", methods=["GET"])
+@jwt_required()
 def get_all_history():
     try:
-        sessions = InterviewSession.query.order_by(InterviewSession.created_at.desc()).all()
+        current_user_id = get_jwt_identity()
+
+        sessions = InterviewSession.query.filter_by(user_id=current_user_id)\
+                   .order_by(InterviewSession.created_at.desc()).all()
         
         result = []
         for s in sessions:
@@ -157,3 +167,18 @@ def get_all_history():
             "success": False,
             "message": "Gagal mengambil data history."
         }), 500
+
+@interview_bp.route("/end", methods=["POST"])
+def end_interview_early():
+    data = request.get_json() or {}
+    session_id = data.get("session_id")
+
+    if not session_id:
+        return jsonify({"success": False, "message": "Session ID wajib diisi."}), 400
+
+    result = force_end_interview(session_id)
+
+    if "error" in result:
+        return jsonify({"success": False, "message": result["error"]}), 400
+
+    return jsonify({"success": True, "message": result["message"]}), 200

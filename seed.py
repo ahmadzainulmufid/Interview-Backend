@@ -1,7 +1,6 @@
 from main import app
 from development.db import db, Category, Role, Position, LevelEnum
 
-
 def seed_categories():
 
     categories = [
