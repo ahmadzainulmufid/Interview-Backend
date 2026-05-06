@@ -25,11 +25,16 @@ ENV_MODE = os.getenv("ENV_MODE", "development")
 
 # --- KONFIGURASI DATABASE ---
 if ENV_MODE == "development":
-    # Jika mode lokal, konek ke DBeaver
+    # 1. Mode Lokal Laptop 
     app.config['SQLALCHEMY_DATABASE_URI'] = 'postgresql://postgres:admin@localhost:5432/interview_db'
-else:
-    # Jika mode production, konek ke Supabase
+
+elif ENV_MODE == "supabase":
+    # 2. Mode Supabase 
     app.config["SQLALCHEMY_DATABASE_URI"] = os.getenv("SUPABASE_DATABASE_URL")
+
+elif ENV_MODE == "production":
+    # 3. Mode VPS IDCloudHost 
+    app.config["SQLALCHEMY_DATABASE_URI"] = os.getenv("DATABASE_URL")
 
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
