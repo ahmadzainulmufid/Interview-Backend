@@ -1,0 +1,30 @@
+# Web Framework & Extensions
+Flask
+Flask-Cors
+Flask-SQLAlchemy
+Flask-JWT-Extended
+Werkzeug
+
+# Database & ORM
+SQLAlchemy
+psycopg2-binary
+
+# AI, LLM & Embeddings
+groq
+sentence-transformers
+chromadb
+
+# Audio & Text-to-Speech
+edge-tts
+gTTS
+pydub
+
+# Data Processing & Utils
+pandas
+python-dotenv
+
+# Production Server
+gunicorn
+
+# Sympy (Catatan: Lihat penjelasan di bawah)
+sympy
