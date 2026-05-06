@@ -1,0 +1,7 @@
+stage,context_precision,faithfulness,answer_relevance
+Technical,0.9200,0.9200,0.9821
+Technical,0.9200,0.9200,0.9800
+Technical,0.9200,0.9200,0.9876
+Technical,0.9200,0.9800,0.9876
+Technical,0.9200,0.9876,0.9876
+Study Case,0.9200,0.9200,0.9876

@@ -33,7 +33,7 @@ embedder = SentenceTransformer("paraphrase-multilingual-MiniLM-L12-v2")
 BASE_DIR = os.path.abspath(os.path.dirname(__file__)) 
 PROJECT_ROOT = os.path.dirname(BASE_DIR) 
 AUDIO_FOLDER = os.path.join(PROJECT_ROOT, 'static', 'audio')
-DATA_PATH = os.path.join(PROJECT_ROOT, 'data', 'knowledge_data_rag_adaptive_final.csv')
+DATA_PATH = os.path.join(PROJECT_ROOT, 'data', 'knowledge_data_indo.csv')
 
 os.makedirs(AUDIO_FOLDER, exist_ok=True)
 
@@ -158,13 +158,20 @@ def evaluate_answer_ai(question, ideal_answer, user_answer):
     cosine_score = max(0, round(cosine_raw * 100))
 
     client = get_groq_client()
-    prompt = f"""Bertindak sebagai penilai interview.
+    prompt = f"""Bertindaklah sebagai Senior IT HRD yang sedang mewawancarai kandidat secara lisan.
+    Kandidat menjawab menggunakan bahasa lisan, sehingga kalimatnya mungkin tidak baku atau campur aduk (Inggris-Indonesia).
+    Tugas Anda: Fokus pada SUBSTANSI dan PEMAHAMAN KONSEP, abaikan tata bahasa.
+
     Pertanyaan: {question}
     Kunci Referensi: {ideal_answer}
     Jawaban Kandidat: {user_answer}
-    Output format JSON: {{"score": 0-100, "feedback": "Kritik singkat 2 kalimat", "status": "Good/Average/Bad"}}"""
+
+    Berikan skor objektif berdasarkan seberapa mirip INTI dari jawaban kandidat dengan kunci referensi.
+    Output HANYA format JSON: {{"score": 0-100, "feedback": "Kritik teknis singkat 2 kalimat", "status": "Good/Average/Bad"}}"""
+
     try:
-        res = client.chat.completions.create(model="llama-3.3-70b-versatile", messages=[{"role": "user", "content": prompt}], temperature=0.2)
+        res = client.chat.completions.create(model="llama-3.3-70b-versatile", messages=[{"role": "user", "content": prompt}], temperature=0.1)
+
         content = res.choices[0].message.content.replace("```json","").replace("```","").strip()
         llm_result = json.loads(content)
         
@@ -176,7 +183,10 @@ def evaluate_answer_ai(question, ideal_answer, user_answer):
         llm_score = 50
         feedback = "Evaluasi LLM error, diasumsikan standar."
 
-    final_score = round((llm_score * 0.7) + (cosine_score * 0.3))
+    if llm_score < 10:
+        cosine_score = 0
+
+    final_score = round((llm_score * 0.9) + (cosine_score * 0.1))
 
     if final_score > 75:
         status = "Good"
