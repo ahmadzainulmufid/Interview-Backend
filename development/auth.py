@@ -48,7 +48,19 @@ db.init_app(app)
 jwt = JWTManager(app)
 
 # --- SETUP CORS ---
-CORS(app, resources={r"/*": {"origins": "http://localhost:5173"}}, supports_credentials=True)
+CORS(
+    app,
+    resources={
+        r"/*": {
+            "origins": [
+                "http://localhost:5173",
+                "https://interviewmate-gamma.vercel.app",
+                "https://api.interviewmate.my.id"
+            ]
+        }
+    },
+    supports_credentials=True
+)
 
 # Callback Blocklist
 @jwt.token_in_blocklist_loader
