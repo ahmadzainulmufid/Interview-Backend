@@ -3,13 +3,17 @@ import os
 import io
 import asyncio
 import edge_tts
+import glob
 from pydub import AudioSegment
 from dotenv import load_dotenv
+from datetime import datetime, timedelta
 import pandas as pd
 import chromadb
 import json
 from chromadb.utils import embedding_functions
 from groq import Groq
+from requests import session
+from requests import session
 from sqlalchemy import text
 from sympy import content
 from sentence_transformers import util, SentenceTransformer
@@ -105,25 +109,93 @@ def get_groq_client():
         raise ValueError("ERROR: TTS_API_KEY belum diset di file .env")
     return Groq(api_key=api_key)
 
-def generate_audio_for_question(text, session_id, q_index):
-    """Menghasilkan file audio mp3 dari teks pertanyaan menggunakan Edge TTS"""
-    filename = f"interview_{session_id}_q{q_index}_{os.urandom(4).hex()}.mp3"
-    filepath = os.path.join(AUDIO_FOLDER, filename)
+async def save_audio_async(text, filepath):
+    communicate = edge_tts.Communicate(
+        text,
+        "id-ID-GadisNeural"
+    )
+    await communicate.save(filepath)
+
+
+def generate_audio_for_question(
+    text,
+    session_id,
+    q_index
+):
+
+    filename = (
+        f"interview_{session_id}_q{q_index}_"
+        f"{os.urandom(4).hex()}.mp3"
+    )
+
+    filepath = os.path.join(
+        AUDIO_FOLDER,
+        filename
+    )
+
+    loop = asyncio.new_event_loop()
+
     try:
-        # Menggunakan suara Gadis (Wanita Indonesia)
-        communicate = edge_tts.Communicate(text, "id-ID-GadisNeural")
-        asyncio.run(communicate.save(filepath))
+        asyncio.set_event_loop(loop)
+
+        loop.run_until_complete(
+            save_audio_async(text, filepath)
+        )
+
         return f"/static/audio/{filename}"
+
     except Exception as e:
         print(f"Edge TTS Error: {e}")
         return None
+
+    finally:
+        loop.close()
+    
+def cleanup_session_audio(session_id):
+    """
+    Menghapus seluruh audio interview dalam satu session
+    """
+
+    try:
+        pattern = os.path.join(
+            AUDIO_FOLDER,
+            f"interview_{session_id}_*.mp3"
+        )
+
+        audio_files = glob.glob(pattern)
+
+        for file in audio_files:
+            try:
+                os.remove(file)
+            except Exception as e:
+                print(f"Gagal menghapus audio {file}: {e}")
+
+    except Exception as e:
+        print(f"Cleanup audio error: {e}")
+
+def generate_closing_audio(session_id):
+
+    closing_text = (
+        "Terima kasih, wawancara telah selesai. Kami akan memproses laporan Anda."
+    )
+
+    return generate_audio_for_question(
+        closing_text,
+        session_id,
+        "closing"
+    )
 
 def transcribe_audio(audio_file):
     """Convert audio to text using Groq Whisper."""
     client = get_groq_client()
     try:
+        audio_file.seek(0)
         file_content = audio_file.read()
-        filename = audio_file.filename if audio_file.filename else "audio.wav"
+        filename = (
+            audio_file.filename
+            if audio_file.filename
+            else "audio.wav"
+        )
         file_tuple = (filename, file_content)
 
         transcription = client.audio.transcriptions.create(
@@ -147,7 +219,8 @@ def extract_experience_topics(user_answer):
         res = client.chat.completions.create(model="llama-3.3-70b-versatile", messages=[{"role": "user", "content": prompt}], temperature=0.2)
         content = res.choices[0].message.content.replace("```json","").replace("```","").strip()
         return json.loads(content).get("topics", [])
-    except:
+    except Exception as e:
+        print(f"Error extracting experience topics: {e}")
         return []
 
 def evaluate_answer_ai(question, ideal_answer, user_answer):
@@ -384,13 +457,29 @@ def start_interview_session(user_id, role="Backend Engineer", level="Junior"):
         "audio_url": audio_url
     }
 
-def process_candidate_answer(session_id, user_answer):
+def process_candidate_answer(current_user_id, session_id, user_answer):
 
     try:
-        session = InterviewSession.query.get(session_id)
+        session = InterviewSession.query.filter_by(
+            id=session_id,
+            user_id=current_user_id
+        ).first()
 
         if not session or session.is_completed:
             return {"error": "Session tidak valid."}
+        
+        max_duration = timedelta(minutes=11)
+
+        if datetime.utcnow() - session.created_at > max_duration:
+
+            session.is_completed = True
+            session.completed_at = datetime.utcnow()
+
+            db.session.commit()
+
+            return {
+            "error": "Waktu wawancara telah habis."
+            }
 
         last_question = InterviewQuestion.query.filter_by(
             session_id=session_id
@@ -398,6 +487,15 @@ def process_candidate_answer(session_id, user_answer):
 
         if not last_question:
             return {"error": "Pertanyaan tidak ditemukan."}
+        
+        existing_answer = InterviewAnswer.query.filter_by(
+            question_id=last_question.id
+        ).first()
+
+        if existing_answer:
+            return {
+            "error": "Pertanyaan ini sudah dijawab."
+        }
 
         eval_result = evaluate_answer_ai(
             last_question.question_text,
@@ -439,12 +537,18 @@ def process_candidate_answer(session_id, user_answer):
 
             session.final_report = final_report
             session.is_completed = True
+            session.completed_at = datetime.utcnow()
 
             db.session.commit()
 
+            cleanup_session_audio(session_id)
+
+            closing_audio = generate_closing_audio(session_id)
+
             return {
                 "stage": "Completed",
-                "final_report": final_report
+                "final_report": final_report,
+                "closing_audio": closing_audio
             }
 
         # Anti duplicate RAG
@@ -510,9 +614,13 @@ def process_candidate_answer(session_id, user_answer):
         print("PROCESS ERROR:", e)
         return {"error": "Terjadi kesalahan sistem."}
     
-def force_end_interview(session_id):
+def force_end_interview(current_user_id, session_id):
     try:
-        session = InterviewSession.query.get(session_id)
+        session = InterviewSession.query.filter_by(
+            id=session_id,
+            user_id=current_user_id
+        ).first()
+
         if not session:
             return {"error": "Session tidak valid."}
         
@@ -530,7 +638,11 @@ def force_end_interview(session_id):
 
         session.final_report = final_report
         session.is_completed = True
+        session.completed_at = datetime.utcnow()
+        
         db.session.commit()
+
+        cleanup_session_audio(session_id)
 
         return {"success": True, "message": "Wawancara diakhiri secara paksa dan laporan disimpan."}
     
@@ -538,3 +650,4 @@ def force_end_interview(session_id):
         db.session.rollback()
         print("FORCE END ERROR:", e)
         return {"error": "Gagal mengakhiri wawancara secara paksa."}
+        

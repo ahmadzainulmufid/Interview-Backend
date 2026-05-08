@@ -39,7 +39,7 @@ elif ENV_MODE == "production":
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 # --- KONFIGURASI JWT ---
-app.config['JWT_SECRET_KEY'] = '54ebd9a346c7e5018084d04d9433e39f9f3d42d2b17006200da49825f6fbb546'
+app.config['JWT_SECRET_KEY'] = os.getenv("JWT_SECRET_KEY")
 app.config['JWT_ACCESS_TOKEN_EXPIRES'] = timedelta(minutes=15)
 app.config['JWT_REFRESH_TOKEN_EXPIRES'] = timedelta(days=30)
 
@@ -48,20 +48,16 @@ db.init_app(app)
 jwt = JWTManager(app)
 
 # --- SETUP CORS ---
-# Ini mengizinkan frontend di port 5173 untuk request ke backend ini
-# supports_credentials=True penting jika nanti main cookies/header auth
 CORS(app, resources={r"/*": {"origins": "http://localhost:5173"}}, supports_credentials=True)
 
 # Callback Blocklist
 @jwt.token_in_blocklist_loader
 def check_if_token_revoked(jwt_header, jwt_payload):
     jti = jwt_payload["jti"]
-    # Perbaikan sintaks: User langsung TokenBlocklist, bukan db.TokenBlocklist
     token = db.session.query(TokenBlocklist.id).filter_by(jti=jti).scalar()
     return token is not None
 
 # --- ROUTES ---
-
 @app.route('/register', methods=['POST'])
 def register():
     username = request.json.get('username')
@@ -75,7 +71,6 @@ def register():
     if password != confirm_password:
         return jsonify({"msg": "Password tidak cocok"}), 400
 
-    # Perbaikan: Pakai 'User.query', bukan 'db.User.query'
     existing_user = User.query.filter((User.username == username) | (User.email == email)).first()
 
     if existing_user:
@@ -136,7 +131,7 @@ def logout():
 @jwt_required()
 def protected():
     current_user_id = get_jwt_identity()
-    user = User.query.get(current_user_id)
+    user = db.session.get(User, current_user_id)
     return jsonify(
         logged_in_as_id=current_user_id,
         username=user.username

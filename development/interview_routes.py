@@ -1,5 +1,5 @@
 # development/interview_routes.py
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify, session
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from development.db import InterviewSession, InterviewQuestion, InterviewAnswer
 from development.interview_service import (
@@ -11,6 +11,10 @@ from development.interview_service import (
 )
 
 interview_bp = Blueprint('interview', __name__)
+
+@interview_bp.route("/health", methods=["GET"])
+def health_check():
+    return jsonify({"status": "ok", "message": "Interview siap digunakan!"}), 200
 
 @interview_bp.route("/start", methods=["POST"])
 @jwt_required()
@@ -30,7 +34,9 @@ def start_interview():
     }), 200
 
 @interview_bp.route("/answer/text", methods=["POST"])
+@jwt_required()
 def submit_text_answer():
+    current_user_id = get_jwt_identity()
 
     data = request.get_json() or {}
 
@@ -43,7 +49,27 @@ def submit_text_answer():
             "message": "Session ID dan jawaban wajib diisi."
         }), 400
 
-    result = process_candidate_answer(session_id, answer_text)
+    try:
+        session_id = int(session_id)
+    except ValueError:
+        return jsonify({
+            "success": False,
+            "message": "Session ID tidak valid."
+        }), 400
+
+    if len(answer_text.strip()) < 3:
+        return jsonify({
+            "success": False,
+            "message": "Jawaban terlalu pendek."
+        }), 400
+
+    if len(answer_text) > 5000:
+        return jsonify({
+            "success": False,
+            "message": "Jawaban terlalu panjang."
+        }), 400
+
+    result = process_candidate_answer(current_user_id, session_id, answer_text)
 
     if "error" in result:
         return jsonify({
@@ -58,7 +84,10 @@ def submit_text_answer():
 
 
 @interview_bp.route("/answer/audio", methods=["POST"])
+@jwt_required()
 def submit_audio_answer():
+
+    current_user_id = get_jwt_identity()
 
     session_id = request.form.get("session_id")
     audio_file = request.files.get("audio")
@@ -71,11 +100,46 @@ def submit_audio_answer():
 
     try:
         session_id = int(session_id)
-    except:
+    except ValueError:
         return jsonify({
             "success": False,
             "message": "Session ID tidak valid."
         }), 400
+
+    session = InterviewSession.query.filter_by(
+        id=session_id,
+        user_id=current_user_id
+    ).first()
+
+    if not session:
+        return jsonify({
+            "success": False,
+            "message": "Session tidak ditemukan atau bukan milik user."
+        }), 404
+    
+    allowed_types = [
+        "audio/webm",
+        "audio/wav",
+        "audio/mpeg",
+        "audio/mp4",
+        "audio/x-wav"
+    ]
+
+    if audio_file.mimetype not in allowed_types:
+        return jsonify({
+            "success": False,
+            "message": "Format audio tidak didukung."
+        }), 400
+    
+    audio_file.seek(0, 2)
+    file_size = audio_file.tell()
+    audio_file.seek(0)
+
+    if file_size > 10 * 1024 * 1024:
+        return jsonify({
+            "success": False,
+            "message": "Ukuran audio terlalu besar."
+    }), 400
 
     transcript = transcribe_audio(audio_file)
 
@@ -85,7 +149,11 @@ def submit_audio_answer():
             "message": "Gagal melakukan transkripsi audio."
         }), 500
 
-    result = process_candidate_answer(session_id, transcript)
+    result = process_candidate_answer(
+        current_user_id,
+        session_id,
+        transcript
+    )
 
     if "error" in result:
         return jsonify({
@@ -169,14 +237,16 @@ def get_all_history():
         }), 500
 
 @interview_bp.route("/end", methods=["POST"])
+@jwt_required()
 def end_interview_early():
+    current_user_id = get_jwt_identity()
     data = request.get_json() or {}
     session_id = data.get("session_id")
 
     if not session_id:
         return jsonify({"success": False, "message": "Session ID wajib diisi."}), 400
 
-    result = force_end_interview(session_id)
+    result = force_end_interview(current_user_id, session_id)
 
     if "error" in result:
         return jsonify({"success": False, "message": result["error"]}), 400
