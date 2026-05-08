@@ -42,65 +42,69 @@ DATA_PATH = os.path.join(PROJECT_ROOT, 'data', 'knowledge_data_indo.csv')
 os.makedirs(AUDIO_FOLDER, exist_ok=True)
 
 def init_knowledge_base():
+
     global chroma_client, collection
 
-    if ENV_MODE == "production":
-        count = db.session.execute(text("SELECT count(*) FROM knowledge_base")).scalar()
-        if count > 0:
-            return True # Sudah terisi
-
-        if not os.path.exists(DATA_PATH): return False
-
-        print("[PROD] Memasukkan CSV ke Supabase Vector...")
-        df = pd.read_csv(DATA_PATH).fillna("General Concept")
-
-        for index, row in df.iterrows():
-            doc_text = row["Embedding_Text"]
-            emb = embedder.encode(doc_text).tolist() 
-            meta = {
-                "role": str(row["Role"]), "stage": str(row["Stage"]),
-                "difficulty_level": int(row["Adaptive_Level"]), "answer": str(row["Answer"])
-            }
-            rag_id = f"q_{index}"
-
-            insert_query = text("""
-                INSERT INTO knowledge_base (id, content, metadata, embedding)
-                VALUES (:id, :content, :metadata, :embedding)
-            """)
-            db.session.execute(insert_query, {
-                "id": rag_id, "content": doc_text,
-                "metadata": json.dumps(meta), "embedding": str(emb)
-            })
-            
-        db.session.commit()
-        print("[PROD] Selesai migrasi CSV ke Supabase!")
-        return True
-
-    else:
-        if collection: return collection
-
-        chroma_path = os.path.join(PROJECT_ROOT, 'chroma_storage')
-        chroma_client = chromadb.PersistentClient(path=chroma_path)
-        embed_fn = embedding_functions.SentenceTransformerEmbeddingFunction(model_name="all-MiniLM-L6-v2")
-        collection = chroma_client.get_or_create_collection(name="adaptive_interview_rag", embedding_function=embed_fn)
-
-        if collection.count() == 0:
-            if not os.path.exists(DATA_PATH): return None
-
-            print("[DEV] Memasukkan CSV ke ChromaDB Lokal...")
-            df = pd.read_csv(DATA_PATH).fillna("General Concept")
-            documents = df["Embedding_Text"].tolist()
-            ids = [f"q_{i}" for i in range(len(df))]
-            metadatas = []
-            for _, row in df.iterrows():
-                metadatas.append({
-                    "role": str(row["Role"]), "stage": str(row["Stage"]),
-                    "difficulty_level": int(row["Adaptive_Level"]), "answer": str(row["Answer"])
-                })
-            collection.add(documents=documents, metadatas=metadatas, ids=ids)
-            print("[DEV] Selesai migrasi CSV ke ChromaDB!")
-            
+    if collection:
         return collection
+
+    chroma_path = os.path.join(
+        PROJECT_ROOT,
+        'chroma_storage'
+    )
+
+    chroma_client = chromadb.PersistentClient(
+        path=chroma_path
+    )
+
+    embed_fn = embedding_functions.SentenceTransformerEmbeddingFunction(
+        model_name="all-MiniLM-L6-v2"
+    )
+
+    collection = chroma_client.get_or_create_collection(
+        name="adaptive_interview_rag",
+        embedding_function=embed_fn
+    )
+
+    # Jika collection kosong → isi dari CSV
+    if collection.count() == 0:
+
+        if not os.path.exists(DATA_PATH):
+            return None
+
+        print("[CHROMA] Memasukkan CSV ke ChromaDB...")
+
+        df = pd.read_csv(DATA_PATH).fillna(
+            "General Concept"
+        )
+
+        documents = df["Embedding_Text"].tolist()
+
+        ids = [
+            f"q_{i}"
+            for i in range(len(df))
+        ]
+
+        metadatas = []
+
+        for _, row in df.iterrows():
+
+            metadatas.append({
+                "role": str(row["Role"]),
+                "stage": str(row["Stage"]),
+                "difficulty_level": int(row["Adaptive_Level"]),
+                "answer": str(row["Answer"])
+            })
+
+        collection.add(
+            documents=documents,
+            metadatas=metadatas,
+            ids=ids
+        )
+
+        print("[CHROMA] Selesai migrasi CSV ke ChromaDB!")
+
+    return collection
 
 def get_groq_client():
     # Konsisten pakai TTS_API_KEY
