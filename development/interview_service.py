@@ -331,54 +331,60 @@ def generate_interview_question(context_text, ideal_answer, role, difficulty_lab
         print("Error Generating Question:", e)
         return f"Tolong jelaskan tentang: {context_text}"
 
-def retrieve_adaptive_question(role, stage, difficulty, used_ids):
+def retrieve_adaptive_question(
+    role,
+    stage,
+    difficulty,
+    used_ids
+):
+
+    global collection
+
     init_knowledge_base()
 
-    if ENV_MODE == "production":
-        query_text = f"{role} {stage} level {difficulty}"
-        query_embedding = embedder.encode(query_text).tolist()
+    where_filter = {
+        "$and": [
+            {"role": role},
+            {"stage": stage}
+        ]
+    }
 
-        if stage == "Technical":
-            sql = text("""
-                SELECT id, content, metadata FROM knowledge_base
-                WHERE metadata->>'role' = :role AND metadata->>'stage' = :stage AND (metadata->>'difficulty_level')::int = :diff
-                ORDER BY embedding <=> :emb::vector LIMIT 20
-            """)
-            params = {"role": role, "stage": stage, "diff": difficulty, "emb": str(query_embedding)}
-        else:
-            sql = text("""
-                SELECT id, content, metadata FROM knowledge_base
-                WHERE metadata->>'role' = :role AND metadata->>'stage' = :stage
-                ORDER BY embedding <=> :emb::vector LIMIT 20
-            """)
-            params = {"role": role, "stage": stage, "emb": str(query_embedding)}
+    # Difficulty hanya untuk Technical
+    if stage == "Technical":
+        where_filter["$and"].append({
+            "difficulty_level": difficulty
+        })
 
-        results = db.session.execute(sql, params).fetchall()
-        for row in results:
-            if row.id not in used_ids:
-                return row.content, row.metadata, row.id
+    results = collection.query(
+        query_texts=[
+            f"{role} {stage} level {difficulty}"
+        ],
+        n_results=20,
+        where=where_filter
+    )
+
+    if (
+        not results["documents"]
+        or not results["documents"][0]
+    ):
         return None, None, None
 
-    else:
-        global collection
-        where_filter = {"$and": [{"role": role}, {"stage": stage}]}
-        if stage == "Technical":
-            where_filter["$and"].append({"difficulty_level": difficulty})
+    for i, doc in enumerate(
+        results["documents"][0]
+    ):
 
-        results = collection.query(
-            query_texts=[f"{role} {stage} level {difficulty}"],
-            n_results=20,
-            where=where_filter
-        )
+        rag_id = results["ids"][0][i]
 
-        if not results["documents"] or not results["documents"][0]:
-            return None, None, None
+        # Hindari pertanyaan duplicate
+        if rag_id not in used_ids:
 
-        for i, doc in enumerate(results["documents"][0]):
-            rag_id = results["ids"][0][i]
-            if rag_id not in used_ids:
-                return doc, results["metadatas"][0][i], rag_id
-        return None, None, None
+            return (
+                doc,
+                results["metadatas"][0][i],
+                rag_id
+            )
+
+    return None, None, None
 
 def generate_final_report_ai(history, role):
     client = get_groq_client()
