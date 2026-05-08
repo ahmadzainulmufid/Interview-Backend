@@ -54,8 +54,7 @@ CORS(
         r"/*": {
             "origins": [
                 "http://localhost:5173",
-                "https://interviewmate-gamma.vercel.app",
-                "https://api.interviewmate.my.id"
+                "https://interviewmate-gamma.vercel.app"
             ]
         }
     },
