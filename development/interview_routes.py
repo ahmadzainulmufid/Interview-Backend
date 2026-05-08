@@ -125,7 +125,9 @@ def submit_audio_answer():
         "audio/x-wav"
     ]
 
-    if audio_file.mimetype not in allowed_types:
+    print(f"[MIMETYPE] {audio_file.mimetype}")
+
+    if not audio_file.mimetype.startswith(("audio/", "video/")):
         return jsonify({
             "success": False,
             "message": "Format audio tidak didukung."
