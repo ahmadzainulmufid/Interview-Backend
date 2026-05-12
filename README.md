@@ -38,34 +38,54 @@ Sebelum menjalankan project, pastikan Anda telah menginstal:
    ```
 
 2. **Buat Virtual Environment**
+
+   ```bash
    python3 -m venv venv
    source venv/bin/activate # Linux/Mac
-
    # venv\Scripts\activate # Windows
 
+   ```
+
 3. **Install Dependensi**
+
+   ```bash
    pip install -r requirements.txt
 
+   ```
+
 4. **Konfigurasi Environment Variables**
+
+   ```bash
    Buat file .env di root folder:
    DATABASE_URL=postgresql://user:password@localhost:5432/interviewmate_db
    GROQ_API_KEY=gsk_your_api_key_here
    JWT_SECRET_KEY=your_secret_key
    ENV_MODE=development
 
-5. **Inisialisasi Database**
-   python3
+   ```
 
+5. **Inisialisasi Database**
+
+   ```bash
+   python3
    > > > from main import app
    > > > from development.db import db
    > > > with app.app_context():
    > > > ... db.create_all()
 
+   ```
+
 6. **Jalankan Seed Data**
+
+   ```bash
    python3 seed.py
 
+   ```
+
 7. **Jalankan Server**
+   ```bash
    python3 main.py
+   ```
 
 ## Dokumentasi API Endpoints
 
