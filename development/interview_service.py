@@ -16,6 +16,7 @@ from requests import session
 from requests import session
 from sqlalchemy import text
 from sympy import content
+import re
 from sentence_transformers import util, SentenceTransformer
 from gtts import gTTS
 from development.db import db
@@ -189,6 +190,137 @@ def generate_closing_audio(session_id):
         "closing"
     )
 
+TECH_TERM_MAP = {
+
+    # Frontend
+    "react js": "React.js",
+    "next js": "Next.js",
+    "tailwind css": "Tailwind CSS",
+
+    # Backend
+    "fast api": "FastAPI",
+    "larafel": "Laravel",
+
+    # Database
+    "postgres sql": "PostgreSQL",
+    "postgre sql": "PostgreSQL",
+    "postgresql": "PostgreSQL",
+
+    # Architecture
+    "micro service": "microservice",
+    "rest api": "REST API",
+    "dev ops": "DevOps",
+
+    # Principles
+    "separation constant":
+        "Separation of Concerns",
+
+    "bikespiration of consent":
+        "Separation of Concerns",
+
+    "separation of concern":
+        "Separation of Concerns",
+
+    "single responsibility principles":
+        "Single Responsibility Principle",
+
+    "single responsibility principal":
+        "Single Responsibility Principle",
+
+    "dont repeat yourself":
+        "Don't Repeat Yourself",
+
+    "don't repeat your serve":
+        "Don't Repeat Yourself",
+
+    "repeat your serve":
+        "Don't Repeat Yourself",
+
+    "kis":
+        "KISS",
+
+    "keep it simple stupid":
+        "KISS",
+
+    "yakni":
+        "YAGNI",
+
+    "you and gonna need it":
+        "YAGNI",
+
+    "you ain't gonna need it":
+        "YAGNI",
+
+    "dri":
+        "DRY",
+
+    "dry principle":
+        "DRY",
+
+    # Misc
+    "ci cd": "CI/CD",
+
+    "full stack": "Fullstack",
+
+    "infrastruktur as code":
+        "Infrastructure as Code",
+
+    "infrastruktur s code":
+        "Infrastructure as Code",
+
+    "lock pad":
+        "logging"
+}
+
+FILLERS = [
+    "eh",
+    "em",
+    "hmm",
+]
+
+def normalize_transcript(text):
+
+    result = text
+
+    for wrong, correct in (
+        TECH_TERM_MAP.items()
+    ):
+
+        result = re.sub(
+
+            rf"\b{re.escape(wrong)}\b",
+
+            correct,
+
+            result,
+
+            flags=re.I
+        )
+
+    for filler in FILLERS:
+
+        result = re.sub(
+
+            rf"\b{filler}\b",
+
+            "",
+
+            result,
+
+            flags=re.I
+        )
+
+    result = re.sub(
+        r"\s+",
+        " ",
+        result
+    )
+
+    return (
+        result
+        .strip()
+    )
+
 def transcribe_audio(audio_file):
     """Convert audio to text using Groq Whisper."""
     client = get_groq_client()
@@ -207,9 +339,32 @@ def transcribe_audio(audio_file):
             model="whisper-large-v3",
             response_format="json",  
             language="id", 
-            temperature=0.0          
+            temperature=0.0,
+            prompt="""
+            Konteks wawancara kerja bidang teknologi informasi.
+            Istilah yang mungkin muncul:
+            React.js, Next.js, TypeScript, JavaScript,
+            Tailwind CSS, Backend, Frontend, Fullstack,
+            PostgreSQL, MySQL, Docker, Kubernetes,
+            AWS, DevOps, CI/CD,
+            Infrastructure as Code,
+            REST API, Microservice,
+            Golang, Python,
+            Laravel, FastAPI.
+            """          
         )
-        return transcription.text
+        raw_text = (
+            transcription.text
+            .strip()
+        )
+
+        normalized = (
+            normalize_transcript(
+                raw_text
+            )
+        )
+
+        return normalized
     except Exception as e:
         print(f"Error Transcribing Audio: {e}")
         return None
