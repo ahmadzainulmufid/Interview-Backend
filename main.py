@@ -1,5 +1,8 @@
 # main.py
+import pandas as pd
+
 from development.auth import app 
+from development.cosine_evaluator import build_global_idf
 from development.db import db, test_connection
 from development.interview_routes import interview_bp
 from development.position import position_bp
@@ -19,6 +22,9 @@ if __name__ == '__main__':
         # db.drop_all()  
         db.create_all()
         print("✅ [DB] Tabel Database sinkron.")
+
+    df_knowledge = pd.read_csv("data/knowledge_data_indo.csv")
+    build_global_idf(df_knowledge["Answer"].dropna().unique().tolist())
 
     # 3. Jalankan Server
     app.run(host='0.0.0.0', port=5001, debug=True)

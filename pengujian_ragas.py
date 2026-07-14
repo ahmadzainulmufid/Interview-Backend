@@ -27,65 +27,65 @@ def safe_json_load(content):
         return None
 
 def evaluate_context_precision(query_text, q_text, ans_text):
-    prompt = f"""Tugas Anda adalah menilai 'Context Precision'.
+    system_instruction = f"""Tugas Anda adalah menilai 'Context Precision'.
 Apakah data referensi (Data Terambil) relevan dan berguna untuk menjawab topik pencarian?
 Topik Pencarian: {query_text}
 Data Terambil: {q_text} | {ans_text}
 
-Berikan skor antara 0.0000 hingga 1.0000. (Gunakan desimal spesifik, contoh: 0.8132, 0.9200, 0.4550).
+Instruksi: Berikan skor antara 0.0000 hingga 1.0000. (Gunakan desimal spesifik, contoh: 0.8132, 0.9200, 0.4550).
 Output HANYA dalam format JSON strict:
 {{"precision_score": <skor>}}"""
 
     response = groq_client.chat.completions.create(
         model="llama-3.3-70b-versatile", 
-        messages=[{"role": "user", "content": prompt}], 
+        messages=[{"role": "user", "content": system_instruction}], 
         temperature=0.1
     )
     res = safe_json_load(response.choices[0].message.content)
     return float(res.get("precision_score", 0.0)) if res else 0.0
 
 def evaluate_faithfulness(q_text, context_doc):
-    prompt = f"""Tugas Anda adalah menilai 'Faithfulness'.
+    system_instruction = f"""Tugas Anda adalah menilai 'Faithfulness'.
 Apakah pertanyaan yang dihasilkan sepenuhnya berdasarkan pada konteks referensi, tanpa mengarang informasi di luar konteks?
 Konteks Referensi (RAG): {context_doc}
 Pertanyaan AI: {q_text}
 
-Berikan skor antara 0.0000 hingga 1.0000. (Gunakan desimal spesifik, contoh: 0.8132, 0.9200, 0.4550).
+Instruksi: Berikan skor antara 0.0000 hingga 1.0000. (Gunakan desimal spesifik, contoh: 0.8132, 0.9200, 0.4550).
 Output HANYA dalam format JSON strict:
 {{"faithfulness_score": <skor>}}"""
 
     response = groq_client.chat.completions.create(
         model="llama-3.3-70b-versatile", 
-        messages=[{"role": "user", "content": prompt}], 
+        messages=[{"role": "user", "content": system_instruction}], 
         temperature=0.1
     )
     res = safe_json_load(response.choices[0].message.content)
     return float(res.get("faithfulness_score", 0.0)) if res else 0.0
 
 def evaluate_answer_relevance(q_text, role):
-    prompt = f"""Tugas Anda adalah menilai 'Question Relevance'.
+    system_instruction = f"""Tugas Anda adalah menilai 'Question Relevance'.
 Apakah pertanyaan ini valid, masuk akal, dan berbobot untuk ditanyakan kepada kandidat pada profesi berikut?
 Role: {role}
 Pertanyaan: {q_text}
 
-Berikan skor antara 0.0000 hingga 1.0000. (Gunakan desimal spesifik, contoh: 0.8132, 0.9200, 0.4550).
+Instruksi: Berikan skor antara 0.0000 hingga 1.0000. (Gunakan desimal spesifik, contoh: 0.8132, 0.9200, 0.4550).
 Output HANYA dalam format JSON strict:
 {{"relevance_score": <skor>}}"""
 
     response = groq_client.chat.completions.create(
         model="llama-3.3-70b-versatile", 
-        messages=[{"role": "user", "content": prompt}], 
+        messages=[{"role": "user", "content": system_instruction}], 
         temperature=0.1
     )
     res = safe_json_load(response.choices[0].message.content)
     return float(res.get("relevance_score", 0.0)) if res else 0.0
 
 def run_rag_evaluation(csv_path="D:\\interview-backend\\data\\hasil_interview_history.csv"):
-    print(f"\n[System] Membaca data history wawancara dari '{csv_path}'...\n")
+    print(f"\nMembaca data history wawancara dari '{csv_path}'...\n")
     try:
         df = pd.read_csv(csv_path)
     except FileNotFoundError:
-        print(f"[Error] File '{csv_path}' tidak ditemukan! Pastikan file berada di folder yang sama dengan script.")
+        print(f"File '{csv_path}' tidak ditemukan!")
         return
 
     target_role = input("Masukkan Posisi/Role (contoh: Backend Engineer): ") or "Backend Engineer"
@@ -107,7 +107,7 @@ def run_rag_evaluation(csv_path="D:\\interview-backend\\data\\hasil_interview_hi
         })
 
     if not results:
-        print("\n[Warning] Tidak ada data berbasis RAG yang dievaluasi (kolom retrieved bernilai kosong/NaN).")
+        print("\nTidak ada data berbasis RAG yang dievaluasi.")
         return
 
     eval_df = pd.DataFrame(results)
@@ -119,7 +119,7 @@ def run_rag_evaluation(csv_path="D:\\interview-backend\\data\\hasil_interview_hi
     }
 
     print("\n" + "="*50)
-    print(" HASIL EVALUASI RAGAS (RAG Assessment)")
+    print(" HASIL EVALUASI RAGAS")
     print("="*50)
     print(f" Context Precision : {metrics_summary['context_precision']:.4f}")
     print(f" Faithfulness      : {metrics_summary['faithfulness']:.4f}")

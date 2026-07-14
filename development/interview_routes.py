@@ -1,14 +1,14 @@
 # development/interview_routes.py
-from flask import Blueprint, request, jsonify, session
+from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from development.db import InterviewSession, InterviewQuestion, InterviewAnswer
 from development.interview_service import (
     start_interview_session,
     process_candidate_answer,
-    transcribe_audio,
     build_session_history,
     force_end_interview
 )
+from development.stt import transcribe_audio
 
 interview_bp = Blueprint('interview', __name__)
 

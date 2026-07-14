@@ -48,6 +48,7 @@ class InterviewSession(db.Model):
 
     # Final Report AI
     final_report = db.Column(db.Text, nullable=True)
+    final_score = db.Column(db.Float, nullable=True)
     created_at = db.Column(db.DateTime, default=db.func.now())
     completed_at = db.Column(db.DateTime, nullable=True)
 
@@ -95,6 +96,7 @@ class InterviewAnswer(db.Model):
     score = db.Column(db.Integer)  
     feedback = db.Column(db.Text)
     status = db.Column(db.String(20)) 
+    meta = db.Column(db.Text, nullable=True)
     created_at = db.Column(db.DateTime, default=db.func.now())
     
 class Category(db.Model):
