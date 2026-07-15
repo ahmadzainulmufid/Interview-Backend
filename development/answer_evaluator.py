@@ -34,7 +34,7 @@ def evaluate_answer_ai(question, ideal_answer, user_answer):
         }
 
     cosine_data = cosine_sentence_analysis(ideal_answer, user_answer)
-    final_score = cosine_data["tfidf_cosine_score"]  
+    final_score = cosine_data["tfidf_cosine_score"]
     if final_score >= THRESHOLD_GOOD:
         status = "Good"
     elif final_score > THRESHOLD_AVERAGE:
@@ -58,19 +58,30 @@ def evaluate_answer_ai(question, ideal_answer, user_answer):
     system_instruction = f"""Kamu adalah Senior IT HRD yang menilai jawaban kandidat interview secara konsisten dan terstruktur.
 
     <data_analisis>
-    Pertanyaan   : {question}
-    Skor akhir   : {final_score:.0%} (Status: {status})
-    Keyword ditemukan   : [{keywords_found_str}]
-    Keyword tidak muncul: [{keywords_missing_str}]
+    Pertanyaan            : {question}
+    Jawaban kandidat (teks lengkap) : {user_answer}
+    Skor akhir            : {final_score:.0%} (Status: {status})
+    Keyword SUDAH ditemukan di jawaban kandidat : [{keywords_found_str}]
+    Keyword TIDAK ditemukan di jawaban kandidat : [{keywords_missing_str}]
     Kalimat kandidat dengan relevansi terendah:
     {weak_str}
     </data_analisis>
-    
+
+    ATURAN WAJIB sebelum menulis feedback:
+    1. JANGAN PERNAH menyebut sebuah konsep sebagai "belum dibahas"/"belum membahas" jika konsep
+       itu (atau sinonimnya) ada di daftar "Keyword SUDAH ditemukan" ATAU muncul di teks jawaban
+       kandidat. Baca ulang teks jawaban kandidat sebelum mengklaim sesuatu tidak ada.
+    2. Konsep yang boleh disebut "belum dibahas" HANYA yang ada di daftar "Keyword TIDAK ditemukan".
+    3. Kalau sebuah konsep sudah disebut kandidat tapi cuma sekilas/tanpa detail (bukan benar-benar
+       hilang), gunakan frasa "sudah disebutkan namun belum dijelaskan secara mendalam" — BUKAN
+       "belum membahas". Ini dua kondisi berbeda, jangan disamakan.
+
     Tulis feedback PERSIS 2 kalimat, format tetap:
     1. Good/Average → "Jawaban Anda sudah mencakup [konsep yang benar], namun belum membahas [1-2 konsep teknis yang hilang]." | Bad → "Jawaban Anda belum membahas [1-2 konsep teknis yang hilang]."
     2. "Untuk memperkuat jawaban, [saran konkret + contoh singkat]."
-    
-    Aturan: konsep yang disebut harus istilah teknis bermakna (bukan kata umum/bilangan seperti "tiga"); jangan sebut angka skor; fokus konten teknis bukan tata bahasa. Output HANYA 2 kalimat itu, tanpa preamble/markdown."""
+
+    Aturan tambahan: konsep yang disebut harus istilah teknis bermakna (bukan kata umum/bilangan seperti "tiga"); jangan sebut angka skor; fokus konten teknis bukan tata bahasa. Output HANYA 2 kalimat itu, tanpa preamble/markdown."""
+
     feedback = "Evaluasi berhasil dilakukan."
 
     try:
